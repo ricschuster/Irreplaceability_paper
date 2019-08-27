@@ -23,32 +23,9 @@ species <- here("data", "nplcc_species.csv") %>%
   read_csv() %>% 
   mutate(id = as.integer(id))
 
-# cost and occupancy
-nplcc_file <- here("data", "nplcc_cost_occupancy.zip")
-if (!file.exists(nplcc_file)) {
-  "https://s3.amazonaws.com/marxan-vs-ilp/nplcc_cost_occupancy.zip" %>% 
-    download.file(destfile = nplcc_file)
-}
-cost_occ <- read_csv(nplcc_file, 
-                     col_types = cols(.default = col_double(),
-                                      pu = col_integer()))
-
-# split out cost and occupancy
-cost <- select(cost_occ, id = pu, cost) %>% 
-  arrange(id)
-occ <- select(cost_occ, -cost) %>% 
-  gather("species_code", "amount", -pu) %>% 
-  inner_join(species %>% select(species_code, species = id), 
-             by = "species_code") %>% 
-  select(pu, species, amount, name = species_code) %>% 
-  arrange(pu, species)
-rm(cost_occ)
-
-# planning unit raster
-pus <- here("data", "nplcc_planning-units.tif") %>% 
-  raster() %>% 
-  # create an empty template
-  raster()
+# cost and features
+cost_r <- raster(here("data/cost.tif"))
+feat_st <- stack(list.files(here("data/features/"), full.names = TRUE))
 
 # setup runs ----
 
@@ -60,7 +37,7 @@ marxan_runs <- expand.grid(
 runs <- expand.grid(target = seq(0.1, 0.9, by = 0.1),
                     n_features = 72,
                     n_pu = 50625,
-                    blm = c(0.1, 1, 10, 100, 1000)) %>%
+                    blm = 0) %>%
   # add marxan specific parameters
   mutate(marxan = list(marxan_runs),
          run_id = 300 + row_number()) %>%
@@ -69,7 +46,7 @@ runs <- expand.grid(target = seq(0.1, 0.9, by = 0.1),
 # fixed run parameters
 ilp_gap <- 0.001
 marxan_reps <- 100
-random_subset <- TRUE
+random_subset <- FALSE
 sysname <- tolower(Sys.info()[["sysname"]])
 marxan_path <- switch(sysname, 
                       windows = here("marxan", "Marxan_x64.exe"), 
@@ -94,35 +71,16 @@ runs_dir <- here("output_blm", "runs")
 #unlink(runs_dir, recursive = TRUE)
 dir.create(runs_dir)
 
-# convert vector of selected units to raster using template
-solution_to_raster <- function(x, y) {
-  x <- filter(x, solution_1 == 1) %>% 
-    pull(id)
-  y[x] <- 1
-  return(y)
-}
-
 set.seed(1)
 
-
-tt <- here("data", "nplcc_planning-units.tif") %>% 
-  raster()
-
-tt[] <- 1:ncell(tt)
-
 e <- extent(560000, 560000 + 22500, 5300000 - 22500, 5300000)
-tmp.r <- crop(tt, e)
+cost_crop <- crop(cost_r, e)
+feat_crop <- crop(feat_st, e)
 
-cost_ss <- cost[cost$id %in% tmp.r[], ] %>% 
-  arrange(id)
+# bnd_mat <- boundary_matrix(cost_crop)
 
-bnd_mat <- boundary_matrix(tmp.r)
-smm_mat <- summary(bnd_mat)
-# df <- as.data.frame(as.matrix(bnd_mat))
-
-bnd_df <- data.frame(id1 = tmp.r[][smm_mat$i],
-                     id2 = tmp.r[][smm_mat$j],
-                     amount = round(smm_mat$x,0))
+cost_r <- tmp.r
+cost_r[] <- cost_ss$cost
 
 runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
   r <- runs[run, ]
@@ -161,6 +119,8 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
   s_gur <- p %>% 
     add_gurobi_solver(gap = ilp_gap) %>%
     prioritizr_timed(force = TRUE)
+  
+  rc <- replacement_cost(p, )
   # solution summary
   cost_gurobi <- attr(s_gur$result, "objective")
   r$gurobi <- list(tibble(n_solutions = 1,
@@ -172,21 +132,6 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
     file.path(gurobi_dir, .) %>% 
     writeRaster(solution_to_raster(s_gur$result, pus), overwrite = TRUE, .)
   rm(s_gur)
-  
-  # symphony
-  s_sym <- p %>% 
-    add_rsymphony_solver(gap = ilp_gap * cost_gurobi) %>% 
-    prioritizr_timed(force = TRUE)
-  # solution summary
-  r$rsymphony <- list(tibble(n_solutions = 1,
-                             cost = attr(s_sym$result, "objective"), 
-                             time = s_sym$time[["elapsed"]]))
-  # save solution
-  s_sym <- "rsymphony_target-{target}_features-{n_features}_pu-{n_pu}_blm-{blm}.tif" %>% 
-    str_glue_data(r, .) %>% 
-    file.path(rsymphony_dir, .) %>% 
-    writeRaster(solution_to_raster(s_sym$result, pus), overwrite = TRUE, .)
-  rm(s_sym)
   
   #marxan
   m_data <- MarxanData(pu = mutate(cost_ss, status = 0L),

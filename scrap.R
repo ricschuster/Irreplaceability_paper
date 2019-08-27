@@ -1,3 +1,14 @@
+nms <- names(cost_occ)
+
+for(ii in 1:ncol(cost_occ)){
+  tmp_r <- here("data", "nplcc_planning-units.tif") %>% 
+    raster()
+  vv <- tmp_r[]
+  vv[!is.na(vv)] <- as.vector(unlist(cost_occ[,ii]))
+  tmp_r[] <- vv
+  writeRaster(tmp_r, file = paste0(here("data/raster//"), nms[ii], ".tif"), overwrite = TRUE)
+}
+
 # load packages
 library(prioritizrdata)
 library(prioritizr)
