@@ -83,8 +83,8 @@ bnd_mat <- boundary_matrix(cost_crop)
 smm_mat <- summary(bnd_mat)
 # df <- as.data.frame(as.matrix(bnd_mat))
 
-bnd_df <- data.frame(id1 = cost_crop[][smm_mat$i],
-                     id2 = cost_crop[][smm_mat$j],
+bnd_df <- data.frame(id1 = smm_mat$i,
+                     id2 = smm_mat$j,
                      amount = round(smm_mat$x,0))
 
 
@@ -106,9 +106,9 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
     add_gurobi_solver(gap = ilp_gap) %>%
     prioritizr_timed(force = TRUE)
   
-  rc <- replacement_cost(p, s_gur$result, force = TRUE)
+  rc <- replacement_cost(p, s_gur$result, force = TRUE, threads = n_cores)
   
-  rw <- rarity_weighted_richness(p, s_gur$result, force = TRUE)
+  rw <- rarity_weighted_richness(p, s_gur$result)
   plot(rw)
   
   # solution summary
@@ -130,9 +130,10 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
   spec <- data.frame(id = 1:nlayers(feat_crop),
                      target = r$target,
                      spf = r$marxan[[1]]$spf, 
-                     name = names(feat_crop))
-  puvspecies <- data.frame(pu = rep(1:ncell(cost_crop), nlayers(feat_crop)),
-                           species = rep(1:nlayers(feat_crop),1, each = ncell(cost_crop)),
+                     name = names(feat_crop),
+                     stringsAsFactors = FALSE)
+  puvspecies <- data.frame(species = rep(1:nlayers(feat_crop),1, each = ncell(cost_crop)),
+                           pu = rep(1:ncell(cost_crop), nlayers(feat_crop)),
                            amount = as.numeric(unlist(as.data.frame(feat_crop))),
                            stringsAsFactors = FALSE)
   puvspecies <- puvspecies[order(puvspecies$pu, puvspecies$species),]
@@ -145,9 +146,9 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
                        boundary = bnd_df, skipchecks = TRUE)
   
   # options
-  m_opts <- MarxanOpts(BLM = r$blm, NCORES = 1L, VERBOSITY = 3L)
+  m_opts <- MarxanOpts(BLM = 0.0, NCORES = 1L, VERBOSITY = 3L)
   m_opts@NUMREPS <- as.integer(marxan_reps)
-  m_opts@NUMITNS <- as.integer(r_marxan$marxan_iterations)
+  m_opts@NUMITNS <- as.integer(r$marxan[[1]]$marxan_iterations)
   m_opts@NUMTEMP <- as.integer(ceiling(m_opts@NUMITNS * 0.2))
   m_unsolved <- MarxanUnsolved(opts = m_opts, data = m_data)
   # solve
