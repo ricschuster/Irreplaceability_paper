@@ -37,7 +37,7 @@ marxan_runs <- expand.grid(
 runs <- expand.grid(target = seq(0.1, 0.9, by = 0.1),
                     n_features = 72,
                     n_pu = 50625,
-                    blm = 0) %>%
+                    blm = 0.0) %>%
   # add marxan specific parameters
   mutate(marxan = list(marxan_runs),
          run_id = 300 + row_number()) %>%
@@ -77,10 +77,16 @@ e <- extent(560000, 560000 + 22500, 5300000 - 22500, 5300000)
 cost_crop <- crop(cost_r, e)
 feat_crop <- crop(feat_st, e)
 
-# bnd_mat <- boundary_matrix(cost_crop)
+rij <- rij_matrix(cost_crop, feat_crop)
 
-cost_r <- tmp.r
-cost_r[] <- cost_ss$cost
+bnd_mat <- boundary_matrix(cost_crop)
+smm_mat <- summary(bnd_mat)
+# df <- as.data.frame(as.matrix(bnd_mat))
+
+bnd_df <- data.frame(id1 = cost_crop[][smm_mat$i],
+                     id2 = cost_crop[][smm_mat$j],
+                     amount = round(smm_mat$x,0))
+
 
 runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
   r <- runs[run, ]
@@ -88,39 +94,23 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
                 ": Target {target}; Features {n_features}; PUs {n_pu}; BLM {blm}") %>% 
     message()
   
-  
-  
-  # sample species and planning units
-  features <- species %>% 
-    select(id, name = species_code) %>% 
-    as.data.frame(stringsAsFactors = FALSE)
-  
-  r$species <- paste(features$name, collapse = ",")
-  pu_ss <- pus
-  pu_ss[cost_ss$id] <- 0
-  rij <- filter(occ, species %in% features$id, pu %in% cost_ss$id) %>% 
-    arrange(pu, species)
-  targets <- group_by(rij, species) %>% 
-    summarize(tot_amount = sum(amount, na.rm = TRUE)) %>% 
-    ungroup() %>% 
-    transmute(id = species, amount = r$target * tot_amount)
-  features <- inner_join(features, targets, by = "id")
-  
   # ilp 
-  p <- problem(cost_ss, 
-               features = features %>% select(id, name), 
-               rij = rij, 
-               cost_column = "cost") %>% 
+  p <- problem(cost_crop, 
+               feat_crop) %>% 
     add_min_set_objective() %>%
     add_relative_targets(r$target) %>%
-    add_binary_decisions() %>%
-    add_boundary_penalties(penalty = r$blm, edge_factor = 0.5, data = bnd_mat)
+    add_proportion_decisions() 
+    # add_binary_decisions() 
   # gurobi
   s_gur <- p %>% 
     add_gurobi_solver(gap = ilp_gap) %>%
     prioritizr_timed(force = TRUE)
   
-  rc <- replacement_cost(p, )
+  rc <- replacement_cost(p, s_gur$result, force = TRUE)
+  
+  rw <- rarity_weighted_richness(p, s_gur$result, force = TRUE)
+  plot(rw)
+  
   # solution summary
   cost_gurobi <- attr(s_gur$result, "objective")
   r$gurobi <- list(tibble(n_solutions = 1,
@@ -133,76 +123,81 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
     writeRaster(solution_to_raster(s_gur$result, pus), overwrite = TRUE, .)
   rm(s_gur)
   
+  pu <- data.frame(id = 1:ncell(cost_crop),
+                   cost = cost_crop[],
+                   status = 0L)
+  
+  spec <- data.frame(id = 1:nlayers(feat_crop),
+                     target = r$target,
+                     spf = r$marxan[[1]]$spf, 
+                     name = names(feat_crop))
+  puvspecies <- data.frame(pu = rep(1:ncell(cost_crop), nlayers(feat_crop)),
+                           species = rep(1:nlayers(feat_crop),1, each = ncell(cost_crop)),
+                           amount = as.numeric(unlist(as.data.frame(feat_crop))),
+                           stringsAsFactors = FALSE)
+  puvspecies <- puvspecies[order(puvspecies$pu, puvspecies$species),]
+  puvspecies <- puvspecies[puvspecies$amount > 0, ]
+                           
   #marxan
-  m_data <- MarxanData(pu = mutate(cost_ss, status = 0L),
-                       species = features %>%
-                         mutate(spf = 1) %>%
-                         select(id, target = amount, spf, name),
-                       puvspecies = select(rij, species, pu, amount),
+  m_data <- MarxanData(pu = pu,
+                       species = spec,
+                       puvspecies = puvspecies, 
                        boundary = bnd_df, skipchecks = TRUE)
-  #loop over marxan iterations
-  r_marxan <- foreach(i_marxan = seq_len(nrow(r$marxan[[1]])),
-                      .combine = bind_rows, .packages = pkg_list) %dopar% {
-                        r_marxan <- r$marxan[[1]][i_marxan, , drop = FALSE]
-                        message(paste0("  Marxan: ",
-                                       "SPF = ", r_marxan$spf, "; ",
-                                       r_marxan$marxan_iterations, " iterations"))
-                        # data
-                        m_data@species$spf <- r_marxan$spf
-                        # options
-                        m_opts <- MarxanOpts(BLM = r$blm, NCORES = 1L, VERBOSITY = 3L)
-                        m_opts@NUMREPS <- as.integer(marxan_reps)
-                        m_opts@NUMITNS <- as.integer(r_marxan$marxan_iterations)
-                        m_opts@NUMTEMP <- as.integer(ceiling(m_opts@NUMITNS * 0.2))
-                        m_unsolved <- MarxanUnsolved(opts = m_opts, data = m_data)
-                        # solve
-                        td <- file.path(tempdir(), paste0("marxan-run_", UUIDgenerate()))
-                        dir.create(td, recursive = TRUE, showWarnings = FALSE)
-                        write.MarxanUnsolved(m_unsolved, td)
-                        file.copy(marxan_path, td)
-                        system(paste0("chmod +x ", file.path(td, basename(marxan_path))))
-                        setwd(td)
-                        m_time <- system.time(system2(marxan_path, args = c("input.dat", "-s")))
-                        m_results <- safely(read.MarxanResults)(td)$result
-                        setwd(here())
-                        unlink(td, recursive = TRUE)
-                        # save
-                        if (!is.null(m_results)) {
-                          str_glue_data(cbind(r, r_marxan),
-                                        "marxan_target-{target}_features-{n_features}_pu-{n_pu}_blm-{blm}_",
-                                        "spf-{spf}_iters-{marxan_iterations}.csv") %>%
-                            file.path(marxan_dir, .) %>%
-                            write_csv(m_results@summary, .)
-                          r_marxan$n_solutions <- sum(m_results@summary$Shortfall == 0)
-                          if (r_marxan$n_solutions > 0) {
-                            best <- filter(m_results@summary, Shortfall == 0) %>%
-                              arrange(Score) %>%
-                              slice(1)
-                            r_marxan$cost <- best$Score
-                            # raster solution
-                            s_mar <- m_results@selections[best$Run_Number,] %>%
-                              as.data.frame() %>%
-                              rownames_to_column() %>%
-                              setNames(c("id", "solution_1")) %>%
-                              mutate(id = str_replace(id, "^P", "") %>% as.numeric()) %>%
-                              solution_to_raster(pus)
-                            str_glue_data(cbind(r, r_marxan),
-                                          "marxan_target-{target}_features-{n_features}_pu-{n_pu}_blm-{blm}_",
-                                          "spf-{spf}_iters-{marxan_iterations}.tif") %>%
-                              file.path(marxan_dir, .) %>%
-                              writeRaster(s_mar, overwrite = TRUE, .)
-                            rm(s_mar)
-                          } else {
-                            r_marxan$cost <- NA_real_
-                          }
-                          r_marxan$time <- m_time["elapsed"]
-                        } else {
-                          r_marxan$n_solutions <- NA_integer_
-                          r_marxan$cost <- NA_real_
-                          r_marxan$time <- NA_real_
-                        }
-                        select(r_marxan, marxan_iterations, spf, n_solutions, cost, time)
-                      }
+  
+  # options
+  m_opts <- MarxanOpts(BLM = r$blm, NCORES = 1L, VERBOSITY = 3L)
+  m_opts@NUMREPS <- as.integer(marxan_reps)
+  m_opts@NUMITNS <- as.integer(r_marxan$marxan_iterations)
+  m_opts@NUMTEMP <- as.integer(ceiling(m_opts@NUMITNS * 0.2))
+  m_unsolved <- MarxanUnsolved(opts = m_opts, data = m_data)
+  # solve
+  td <- file.path(tempdir(), paste0("marxan-run_", UUIDgenerate()))
+  dir.create(td, recursive = TRUE, showWarnings = FALSE)
+  write.MarxanUnsolved(m_unsolved, td)
+  file.copy(marxan_path, td)
+  system(paste0("chmod +x ", file.path(td, basename(marxan_path))))
+  setwd(td)
+  m_time <- system.time(system2(marxan_path, args = c("input.dat", "-s")))
+  m_results <- safely(read.MarxanResults)(td)$result
+  setwd(here())
+  unlink(td, recursive = TRUE)
+  # save
+  if (!is.null(m_results)) {
+    str_glue_data(cbind(r, r_marxan),
+                  "marxan_target-{target}_features-{n_features}_pu-{n_pu}_blm-{blm}_",
+                  "spf-{spf}_iters-{marxan_iterations}.csv") %>%
+      file.path(marxan_dir, .) %>%
+      write_csv(m_results@summary, .)
+    r_marxan$n_solutions <- sum(m_results@summary$Shortfall == 0)
+    if (r_marxan$n_solutions > 0) {
+      best <- filter(m_results@summary, Shortfall == 0) %>%
+        arrange(Score) %>%
+        slice(1)
+      r_marxan$cost <- best$Score
+      # raster solution
+      s_mar <- m_results@selections[best$Run_Number,] %>%
+        as.data.frame() %>%
+        rownames_to_column() %>%
+        setNames(c("id", "solution_1")) %>%
+        mutate(id = str_replace(id, "^P", "") %>% as.numeric()) %>%
+        solution_to_raster(pus)
+      str_glue_data(cbind(r, r_marxan),
+                    "marxan_target-{target}_features-{n_features}_pu-{n_pu}_blm-{blm}_",
+                    "spf-{spf}_iters-{marxan_iterations}.tif") %>%
+        file.path(marxan_dir, .) %>%
+        writeRaster(s_mar, overwrite = TRUE, .)
+      rm(s_mar)
+    } else {
+      r_marxan$cost <- NA_real_
+    }
+    r_marxan$time <- m_time["elapsed"]
+  } else {
+    r_marxan$n_solutions <- NA_integer_
+    r_marxan$cost <- NA_real_
+    r_marxan$time <- NA_real_
+  }
+  select(r_marxan, marxan_iterations, spf, n_solutions, cost, time)
+}
   r$marxan <- list(r_marxan)
   # save this iteration in case of crashing
   str_glue_data(r, "run-", run,
