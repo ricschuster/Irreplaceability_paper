@@ -25,7 +25,9 @@ species <- here("data", "nplcc_species.csv") %>%
 
 # cost and features
 cost_r <- raster(here("data/cost.tif"))
-feat_st <- stack(list.files(here("data/features/"), full.names = TRUE))
+# feat_st <- stack(list.files(here("data/features/"), full.names = TRUE))
+#debug
+feat_st <- stack(list.files(here("data/features/"), full.names = TRUE)[1:10])
 
 # setup runs ----
 
@@ -46,6 +48,9 @@ runs <- expand.grid(target = seq(0.1, 0.9, by = 0.1),
 # fixed run parameters
 ilp_gap <- 0.001
 marxan_reps <- 100
+#debug
+marxan_reps <- 10
+
 random_subset <- FALSE
 sysname <- tolower(Sys.info()[["sysname"]])
 marxan_path <- switch(sysname, 
@@ -71,7 +76,7 @@ dir.create(runs_dir)
 set.seed(1)
 
 # e <- extent(560000, 560000 + 22500, 5300000 - 22500, 5300000)
-e <- extent(560000, 560000 + 2000, 5300000 - 2000, 5300000)
+e <- extent(560000, 560000 + 1000, 5300000 - 1000, 5300000)
 cost_crop <- crop(cost_r, e)
 feat_crop <- crop(feat_st, e)
 
@@ -184,47 +189,25 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
   unlink(td, recursive = TRUE)
   # save
   if (!is.null(m_results)) {
-    str_glue_data(cbind(r, r_marxan),
-                  "marxan_target-{target}_features-{n_features}_pu-{n_pu}_blm-{blm}_",
-                  "spf-{spf}_iters-{marxan_iterations}.csv") %>%
+    str_glue_data(r,
+                  "marxan_target-{target}_summary.csv") %>%
       file.path(marxan_dir, .) %>%
       write_csv(m_results@summary, .)
-    r_marxan$n_solutions <- sum(m_results@summary$Shortfall == 0)
-    if (r_marxan$n_solutions > 0) {
-      best <- filter(m_results@summary, Shortfall == 0) %>%
-        arrange(Score) %>%
-        slice(1)
-      r_marxan$cost <- best$Score
-      # raster solution
-      s_mar <- m_results@selections[best$Run_Number,] %>%
-        as.data.frame() %>%
-        rownames_to_column() %>%
-        setNames(c("id", "solution_1")) %>%
-        mutate(id = str_replace(id, "^P", "") %>% as.numeric()) %>%
-        solution_to_raster(pus)
-      str_glue_data(cbind(r, r_marxan),
-                    "marxan_target-{target}_features-{n_features}_pu-{n_pu}_blm-{blm}_",
-                    "spf-{spf}_iters-{marxan_iterations}.tif") %>%
+    
+    tmp_r <- cost_crop
+    tmp_r[] <- as.vector(colSums(m_results@selections))
+    
+    tmp_r <- str_glue_data(r,
+                    "marxan_target-{target}_selection_frequency.tif") %>%
         file.path(marxan_dir, .) %>%
-        writeRaster(s_mar, overwrite = TRUE, .)
+        writeRaster(tmp_r, overwrite = TRUE, .)
       rm(s_mar)
-    } else {
-      r_marxan$cost <- NA_real_
-    }
-    r_marxan$time <- m_time["elapsed"]
-  } else {
-    r_marxan$n_solutions <- NA_integer_
-    r_marxan$cost <- NA_real_
-    r_marxan$time <- NA_real_
-  }
-  select(r_marxan, marxan_iterations, spf, n_solutions, cost, time)
-}
-  r$marxan <- list(r_marxan)
-  # save this iteration in case of crashing
+      
   str_glue_data(r, "run-", run,
-                "_target-{target}_features-{n_features}_pu-{n_pu}_blm-{blm}.rds") %>%
+                "_target-{target}.rds") %>%
     file.path(runs_dir, .) %>%
     saveRDS(r, .)
+  }
   r
 }
 
