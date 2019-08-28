@@ -185,6 +185,7 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
     m_opts@NUMITNS <- as.integer(r$marxan[[1]]$marxan_iterations)
     m_opts@NUMTEMP <- as.integer(ceiling(m_opts@NUMITNS * 0.2))
     m_unsolved <- MarxanUnsolved(opts = m_opts, data = m_data)
+    
     # solve
     td <- file.path(tempdir(), paste0("marxan-run_", UUIDgenerate()))
     dir.create(td, recursive = TRUE, showWarnings = FALSE)
@@ -193,6 +194,8 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
     system(paste0("chmod +x ", file.path(td, basename(marxan_path))))
     setwd(td)
     m_time <- system.time(system2(marxan_path, args = c("input.dat", "-s")))
+    
+    #read and copy results
     m_results <- safely(read.MarxanResults)(td)$result
     setwd(here())
     svfld <- here("output", "runs", str_glue_data(r,
@@ -200,8 +203,8 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
     dir.create(svfld, recursive = TRUE, showWarnings = FALSE)
     fls    <- list.files(path = td, full.names = TRUE, recursive = TRUE)
     for (f in fls) file.copy(from = f, to = svfld)
-    file.copy(td, svfld, recursive=TRUE)
     unlink(td, recursive = TRUE)
+    
     # save
     if (!is.null(m_results)) {
       str_glue_data(r,
@@ -226,23 +229,6 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
 
   r
 }
-
-# # unnest
-# runs_g <- runs %>% 
-#   mutate(solver = "gurobi") %>% 
-#   select(run_id, solver, target, n_features, n_pu, species, gurobi) %>% 
-#   unnest()
-# runs_s <- runs %>% 
-#   mutate(solver = "rsymphony") %>% 
-#   select(run_id, solver, target, n_features, n_pu, species, rsymphony) %>% 
-#   unnest()
-# # runs_m <- runs %>% 
-# #   mutate(solver = "marxan") %>% 
-# #   select(run_id, solver, target, n_features, n_pu, species, marxan) %>% 
-# #   unnest()
-# runs_long <- bind_rows(runs_g, runs_s)
-# # runs_long <- bind_rows(runs_g, runs_s, runs_m)
-# write_csv(runs_long, here("output_blm", "ilp-comparison-runs_no_marx.csv"))
 
 # clean up
 stopCluster(cl)
