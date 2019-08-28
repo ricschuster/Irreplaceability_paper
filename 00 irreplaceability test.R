@@ -87,7 +87,7 @@ bnd_df <- data.frame(id1 = smm_mat$i,
                      id2 = smm_mat$j,
                      amount = round(smm_mat$x,0))
 
-run <- 1
+run <- 3
 
 r <- runs[run, ]
 str_glue_data(r, "Run ", run, 
@@ -106,7 +106,10 @@ s_gur <- p %>%
   add_gurobi_solver(gap = ilp_gap) %>%
   prioritizr_timed(force = TRUE)
 
-rc <- replacement_cost(p, s_gur$result, force = TRUE, threads = n_cores)
+spplot(s_gur$result, "cost", main = "Solution",  at = c(0, 0.99),
+       col.regions = c("#440154", "#FDE725"))
+
+system.time(rc <- replacement_cost(p, s_gur$result, force = TRUE, threads = n_cores))
 
 # rw <- rarity_weighted_richness(p, s_gur$result)
 # plot(rw)
