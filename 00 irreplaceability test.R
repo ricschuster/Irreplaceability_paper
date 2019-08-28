@@ -87,7 +87,7 @@ bnd_df <- data.frame(id1 = smm_mat$i,
                      id2 = smm_mat$j,
                      amount = round(smm_mat$x,0))
 
-run <- 3
+run <- 1
 
 r <- runs[run, ]
 str_glue_data(r, "Run ", run, 

@@ -108,8 +108,17 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
   
   rc <- replacement_cost(p, s_gur$result, force = TRUE, threads = n_cores)
   
+  spplot(rc, "cost", main = "Replacement cost",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
+         col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
+                         "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
+                         "#FF0000"))
+  
   rw <- rarity_weighted_richness(p, s_gur$result)
-  plot(rw)
+  # plot(rw)
+  spplot(rw, "cost", main = "Rarity weigthed richness",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
+         col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
+                         "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
+                         "#FF0000"))
   
   # solution summary
   cost_gurobi <- attr(s_gur$result, "objective")
