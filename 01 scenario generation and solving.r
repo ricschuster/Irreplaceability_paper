@@ -58,22 +58,20 @@ stopifnot(file.exists(marxan_path))
 # iterate over runs ----
 
 # clean up old files
-gurobi_dir <- here("output_blm", "gurobi")
-#unlink(gurobi_dir, recursive = TRUE)
+gurobi_dir <- here("output", "gurobi")
+# unlink(gurobi_dir, recursive = TRUE)
 dir.create(gurobi_dir)
-rsymphony_dir <- here("output_blm", "rsymphony")
-#unlink(rsymphony_dir, recursive = TRUE)
-dir.create(rsymphony_dir)
-marxan_dir <- here("output_blm", "marxan")
-#unlink(marxan_dir, recursive = TRUE)
+marxan_dir <- here("output", "marxan")
+# unlink(marxan_dir, recursive = TRUE)
 dir.create(marxan_dir)
-runs_dir <- here("output_blm", "runs")
-#unlink(runs_dir, recursive = TRUE)
+runs_dir <- here("output", "runs")
+# unlink(runs_dir, recursive = TRUE)
 dir.create(runs_dir)
 
 set.seed(1)
 
-e <- extent(560000, 560000 + 22500, 5300000 - 22500, 5300000)
+# e <- extent(560000, 560000 + 22500, 5300000 - 22500, 5300000)
+e <- extent(560000, 560000 + 2000, 5300000 - 2000, 5300000)
 cost_crop <- crop(cost_r, e)
 feat_crop <- crop(feat_st, e)
 
@@ -108,17 +106,17 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
   
   rc <- replacement_cost(p, s_gur$result, force = TRUE, threads = n_cores)
   
-  spplot(rc, "cost", main = "Replacement cost",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
-         col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
-                         "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
-                         "#FF0000"))
+  # spplot(rc, "cost", main = "Replacement cost",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
+  #        col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
+  #                        "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
+  #                        "#FF0000"))
   
   rw <- rarity_weighted_richness(p, s_gur$result)
   # plot(rw)
-  spplot(rw, "cost", main = "Rarity weigthed richness",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
-         col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
-                         "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
-                         "#FF0000"))
+  # spplot(rw, "cost", main = "Rarity weigthed richness",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
+  #        col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
+  #                        "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
+  #                        "#FF0000"))
   
   # solution summary
   cost_gurobi <- attr(s_gur$result, "objective")
@@ -126,12 +124,26 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
                           cost = cost_gurobi, 
                           time = s_gur$time[["elapsed"]]))
   # save solution
-  s_gur <- "gurobi_target-{target}_features-{n_features}_pu-{n_pu}_blm-{blm}.tif" %>% 
+  s_gur <- "gurobi_target-{target}_solution.tif" %>% 
     str_glue_data(r, .) %>% 
     file.path(gurobi_dir, .) %>% 
-    writeRaster(solution_to_raster(s_gur$result, pus), overwrite = TRUE, .)
-  rm(s_gur)
+    writeRaster(s_gur$result, overwrite = TRUE, .)
   
+  
+  rc <- "gurobi_target-{target}_replacement_cost.tif" %>% 
+    str_glue_data(r, .) %>% 
+    file.path(gurobi_dir, .) %>% 
+    writeRaster(rc, overwrite = TRUE, .)
+  
+  rw <- "gurobi_target-{target}_rarity_weighted_richness.tif" %>% 
+    str_glue_data(r, .) %>% 
+    file.path(gurobi_dir, .) %>% 
+    writeRaster(rw, overwrite = TRUE, .)
+  
+  rm(s_gur, rc, rw)
+  
+                           
+  #marxan
   pu <- data.frame(id = 1:ncell(cost_crop),
                    cost = cost_crop[],
                    status = 0L)
@@ -147,8 +159,7 @@ runs <- foreach(run = seq_len(nrow(runs)), .combine = bind_rows) %do% {
                            stringsAsFactors = FALSE)
   puvspecies <- puvspecies[order(puvspecies$pu, puvspecies$species),]
   puvspecies <- puvspecies[puvspecies$amount > 0, ]
-                           
-  #marxan
+  
   m_data <- MarxanData(pu = pu,
                        species = spec,
                        puvspecies = puvspecies, 
