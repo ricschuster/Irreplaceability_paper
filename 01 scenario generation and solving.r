@@ -16,7 +16,7 @@ select <- dplyr::select
 walk(list.files("R", full.names = TRUE), source)
 prioritizr_timed <- add_timer(prioritizr::solve)
 # parallelization
-n_cores <- 12
+n_cores <- 11
 cl <- makeCluster(n_cores)
 registerDoParallel(cl)
 
@@ -29,9 +29,9 @@ species <- here("data", "nplcc_species.csv") %>%
 
 # cost and features
 cost_r <- raster(here("data/cost.tif"))
-# feat_st <- stack(list.files(here("data/features/"), full.names = TRUE))
+feat_st <- stack(list.files(here("data/features/"), full.names = TRUE))
 #debug
-feat_st <- stack(list.files(here("data/features/"), full.names = TRUE)[1:10])
+# feat_st <- stack(list.files(here("data/features/"), full.names = TRUE)[1:10])
 
 # setup runs ----
 
@@ -52,8 +52,8 @@ runs <- expand.grid(target = seq(0.1, 0.9, by = 0.1),
 # fixed run parameters
 ilp_gap <- 0.001
 marxan_reps <- 100
-#debug
-marxan_reps <- 10
+# debug
+# marxan_reps <- 10
 
 random_subset <- FALSE
 sysname <- tolower(Sys.info()[["sysname"]])
@@ -81,9 +81,9 @@ if(run_ilp & run_marxan){
 
 set.seed(1)
 
-# e <- extent(560000, 560000 + 22500, 5300000 - 22500, 5300000)
-#debug
-e <- extent(560000, 560000 + 1000, 5300000 - 1000, 5300000)
+e <- extent(560000, 560000 + 22500, 5300000 - 22500, 5300000)
+# debug
+# e <- extent(560000, 560000 + 1000, 5300000 - 1000, 5300000)
 cost_crop <- crop(cost_r, e)
 feat_crop <- crop(feat_st, e)
 
