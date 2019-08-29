@@ -168,7 +168,7 @@ bnd_df <- data.frame(id1 = smm_mat$i,
                      status = 0L)
     
     spec <- data.frame(id = 1:nlayers(feat_crop),
-                       target = r$target,
+                       target = r$target * colSums(as.data.frame(feat_crop)),
                        spf = r$marxan[[1]]$spf, 
                        name = names(feat_crop),
                        stringsAsFactors = FALSE)
