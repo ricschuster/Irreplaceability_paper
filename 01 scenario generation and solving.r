@@ -65,16 +65,16 @@ marxan_path <- switch(sysname,
 stopifnot(file.exists(marxan_path))
 
 # iterate over runs ----
+gurobi_dir <- here("output", "gurobi")
+marxan_dir <- here("output", "marxan")
+runs_dir <- here("output", "runs")
 
 # clean up old files
 if(run_ilp & run_marxan){
-  gurobi_dir <- here("output", "gurobi")
   unlink(gurobi_dir, recursive = TRUE)
   dir.create(gurobi_dir)
-  marxan_dir <- here("output", "marxan")
   unlink(marxan_dir, recursive = TRUE)
   dir.create(marxan_dir)
-  runs_dir <- here("output", "runs")
   unlink(runs_dir, recursive = TRUE)
   dir.create(runs_dir)
 }
