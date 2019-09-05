@@ -22,7 +22,7 @@ THRESHPEN1 0
 THRESHPEN2 0
 
 Input File
-INPUTDIR C:\Users\richard\AppData\Local\Temp\RtmpAhXaOl/marxan-run_7a65afca-c9e6-11e9-b887-8778f2478dbe
+INPUTDIR C:\Users\richard\AppData\Local\Temp\RtmpE14poG/marxan-run_0adc9b74-ca76-11e9-b3af-af330e64d620
 SPECNAME spec.dat
 PUNAME pu.dat
 PUVSPRNAME puvspr.dat
@@ -42,7 +42,7 @@ SAVELOG 1
 SAVESNAPSTEPS 0
 SAVESNAPCHANGES 0
 SAVESNAPFREQUENCY 0
-OUTPUTDIR C:\Users\richard\AppData\Local\Temp\RtmpAhXaOl/marxan-run_7a65afca-c9e6-11e9-b887-8778f2478dbe
+OUTPUTDIR C:\Users\richard\AppData\Local\Temp\RtmpE14poG/marxan-run_0adc9b74-ca76-11e9-b3af-af330e64d620
 
 Program control.
 RUNMODE 1
