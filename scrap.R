@@ -1,3 +1,9 @@
+library(raster)
+library(here)
+
+sol <- 
+
+
 nms <- names(cost_occ)
 
 for(ii in 1:ncol(cost_occ)){
@@ -63,23 +69,25 @@ rw <- raster(here("output/gurobi/gurobi_target-0.1_rarity_weighted_richness.tif"
 sol <- raster(here("output/gurobi/gurobi_target-0.1_solution.tif"))
 sel <- raster(here("output/marxan/marxan_target-0.1_selection_frequency.tif"))
 
-
+gridExtra::grid.arrange(
+  
 spplot(sol, names(sol), main = "Solution",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
-      col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
-                      "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
-                      "#FF0000"))
+       col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
+                       "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
+                       "#FF0000")),
 
 spplot(rc, names(rc), main = "Replacement cost",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
        col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
                        "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
-                       "#FF0000"))
+                       "#FF0000")),
 
-spplot(rw, names(rw), main = "RW",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
+spplot(rw, names(rw), main = "Rarity weighted richness",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
+       col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
+                       "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
+                       "#FF0000")),
+
+spplot(sel, names(sel), main = "Selection frequency",  at = c(seq(0, 100, 10)),
        col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
                        "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
                        "#FF0000"))
-
-spplot(sel, names(sel), main = "Marxan",  at = c(seq(0, 0.9, 0.1), 1.01, 1.1),
-       col.regions = c("#440154", "#482878", "#3E4A89", "#31688E", "#26828E",
-                       "#1F9E89", "#35B779", "#6DCD59", "#B4DE2C", "#FDE725",
-                       "#FF0000"))
+)
